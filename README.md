@@ -2,13 +2,12 @@
 
 - [以前書いた文書生成プログラム][mmt]ベースのベンチマークスクリプト
 - 1時間（仮）で何epoch学習できて、そのモデルから1000文字（仮）生成した時にどの程度読める文章ができるかを比較
-- CPU vs GPUを想定
-- 対応済環境とインストール手順は[ベース版][mmt]と同じだが、Pythonビルド前にパッケージ`liblzma-dev`を入れる必要あり
 
 ---
 
 1. [Environments](#environments)
 1. [Installation](#installation)
+1. [Usage](#usage)
 1. [Rule](#rule)
 1. [Evaluation](#evaluation)
 1. [Records](#records)
@@ -31,6 +30,18 @@
 $ sudo apt install liblzma-dev
 $ pyenv install 3.6.7
 $ pip install tensorflow numpy tqdm
+```
+
+## Usage
+
+- 基本的に[オリジナル][mmt]の機能を大きく省いただけ
+    - モデルの保存や生成されたテキストのファイルへの書き込み、各種パラメータ指定を削除
+
+```bash
+# 基本はこれだけ
+$ python bm1h_rnn_sentence.py
+# こうすると強制的にCPUを使った学習になる
+$ python bm1h_rnn_sentence.py -c
 ```
 
 ## Rule
@@ -78,7 +89,7 @@ $ pip install tensorflow numpy tqdm
 ### PC 2 (GPU)
 
 - CPU, RAM: 同上
-- GPU: AMD Radeon RX 580
+- GPU: AMD [Radeon RX 580](https://www.amd.com/ja/products/graphics/radeon-rx-580)
 - VRAM: 8GB
 - OS: 同上
 

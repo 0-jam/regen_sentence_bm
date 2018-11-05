@@ -53,8 +53,7 @@ class Model(tf.keras.Model):
         return x, states
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate sentence with RNN. README.md contains further information.")
-    parser.add_argument("-o", "--output", type=str, help="output file path (default: stdout)")
+    parser = argparse.ArgumentParser(description="Benchmarking of sentence generation with RNN.")
     parser.add_argument("-c", "--cpu_mode", action='store_true', help="Force to use CPU (default: False)")
     args = parser.parse_args()
 
@@ -167,11 +166,7 @@ def main():
         generated_text += idx2char[predicted_id]
 
     generated_text = start_string + generated_text + "\n"
-    if args.output:
-        with Path(args.output).open('w') as out:
-            out.write(generated_text)
-    else:
-        sys.stdout.write(generated_text)
+    sys.stdout.write(generated_text)
 
     print("Learned {} epochs in {} minutes ({:.3f} epochs / minute)".format(epoch, elapsed_time, epoch / elapsed_time))
     print("Minimum loss:", min_loss)

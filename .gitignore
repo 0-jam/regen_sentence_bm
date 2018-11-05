@@ -102,6 +102,3 @@ ENV/
 
 # VS Code Settings
 .vscode
-
-# Actual Data
-*.txt
