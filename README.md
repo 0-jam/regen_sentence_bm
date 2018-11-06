@@ -6,22 +6,37 @@
 ---
 
 1. [Environments](#environments)
+1. [About Dataset](#about-dataset)
 1. [Installation](#installation)
 1. [Usage](#usage)
 1. [Rule](#rule)
 1. [Evaluation](#evaluation)
 1. [Records](#records)
-    1. [PC 1 (CPU, Native Windows)](#pc-1-cpu-native-windows)
-    1. [PC 1 (CPU, WSL)](#pc-1-cpu-wsl)
-    1. [PC 2 (CPU)](#pc-2-cpu)
-    1. [PC 2 (GPU)](#pc-2-gpu)
 
 ---
 
 ## Environments
 
-- Python 3.6.7 on Ubuntu 18.04.1 on Windows Subsystem for Linux (Windows 10 Home 1803 (April 2018))
-- Python 3.6.7 on Windows 10 Home 1803 (April 2018)
+- Python = 3.6.7 on Ubuntu 18.04.1 on Windows Subsystem for Linux (Windows 10 Home 1803 (April 2018))
+- Python = 3.6.7 on Windows 10 Home 1803 (April 2018)
+- TensorFlow >= 1.11.0
+
+## About Dataset
+
+- 夏目漱石の小説7編
+    1. 坊っちゃん
+    1. こころ
+    1. 草枕
+    1. 思い出す事など
+    1. 三四郎
+    1. それから
+    1. 吾輩は猫である
+- [青空文庫](https://www.aozora.gr.jp/index_pages/person148.html)のテキスト版がベース
+    - 7編を1つのテキストファイルに結合
+    - ふりがなや装飾文字の除去
+    - 文字コード変換(Shift_JIS (CP932) -> UTF-8)
+- 展開後サイズ：約3.01MiB
+    - `$ xz -9 -e -T 0 souseki_utf8.txt`
 
 ## Installation
 
@@ -38,10 +53,9 @@ $ pip install tensorflow numpy tqdm
     - モデルの保存や生成されたテキストのファイルへの書き込み、各種パラメータ指定を削除
 
 ```bash
-# 基本はこれだけ
+# これだけ
+# "-c"オプションをつけると強制的にCPUを使った学習になる
 $ python bm1h_rnn_sentence.py
-# こうすると強制的にCPUを使った学習になる
-$ python bm1h_rnn_sentence.py -c
 ```
 
 ## Rule
@@ -68,29 +82,6 @@ $ python bm1h_rnn_sentence.py -c
 
 ## Records
 
-### PC 1 (CPU, Native Windows)
-
-- CPU: Intel [Core i5 7200U](https://ark.intel.com/products/95443/Intel-Core-i5-7200U-Processor-3M-Cache-up-to-3_10-GHz)
-- RAM: 8GB
-- Windows 10 Home 1803 (April 2018)
-
-### PC 1 (CPU, WSL)
-
-- CPU, RAM: 同上
-- OS: Ubuntu 18.04.1 on Windows Subsystem for Linux (Windows 10 Home 1803 (April 2018))
-
-### PC 2 (CPU)
-
-- CPU: AMD [Ryzen 7 1700](https://www.amd.com/ja/products/cpu/amd-ryzen-7-1700)
-- RAM: 16GB
-- OS: Ubuntu 18.04.1＋[ROCm](https://github.com/RadeonOpenCompute/ROCm)モジュール
-    - [公式Dockerイメージ](https://hub.docker.com/r/rocm/tensorflow/)上で実行
-
-### PC 2 (GPU)
-
-- CPU, RAM: 同上
-- GPU: AMD [Radeon RX 580](https://www.amd.com/ja/products/graphics/radeon-rx-580)
-- VRAM: 8GB
-- OS: 同上
+- [ベンチマーク記録はこちら](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
 
 [mmt]: https://github.com/0-jam/regen_my_sentences

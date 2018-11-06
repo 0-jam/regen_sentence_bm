@@ -102,3 +102,6 @@ ENV/
 
 # VS Code Settings
 .vscode
+
+# Record data
+*.txt
