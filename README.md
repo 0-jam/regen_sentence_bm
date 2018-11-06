@@ -1,6 +1,7 @@
 # (Benchmarking) Regenerate Sentences
 
 - [以前書いた文書生成プログラム][mmt]ベースのベンチマークスクリプト
+    - 基本的にオリジナルの機能を大きく省いただけ
 - 1時間（仮）で何epoch学習できて、そのモデルから1000文字（仮）生成した時にどの程度読める文章ができるかを比較
 
 ---
@@ -31,12 +32,16 @@
     1. 三四郎
     1. それから
     1. 吾輩は猫である
-- [青空文庫](https://www.aozora.gr.jp/index_pages/person148.html)のテキスト版がベース
+- [青空文庫](https://www.aozora.gr.jp/index_pages/person148.html)のテキスト版をベースに前処理
     - 7編を1つのテキストファイルに結合
     - ふりがなや装飾文字の除去
+        - 詳しくは[こちら](https://github.com/0-jam/regen_my_sentences#aozora-bunko)
     - 文字コード変換(Shift_JIS (CP932) -> UTF-8)
-- 展開後サイズ：約3.01MiB
-    - `$ xz -9 -e -T 0 souseki_utf8.txt`
+- 前処理後にXZ (LZMA2)で圧縮
+    - スクリプト実行時にPythonによって展開される
+    - 展開後サイズ：約3.01MiB
+    - 圧縮：`$ xz -9 -e -T 0 souseki_utf8.txt`
+    - 展開：`$ xz -d souseki_utf8.txt -k`
 
 ## Installation
 
@@ -48,9 +53,6 @@ $ pip install tensorflow numpy tqdm
 ```
 
 ## Usage
-
-- 基本的に[オリジナル][mmt]の機能を大きく省いただけ
-    - モデルの保存や生成されたテキストのファイルへの書き込み、各種パラメータ指定を削除
 
 ```bash
 # これだけ
@@ -82,6 +84,6 @@ $ python bm1h_rnn_sentence.py
 
 ## Records
 
-- [ベンチマーク記録はこちら](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
+- ベンチマーク記録は[こちら](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
 
 [mmt]: https://github.com/0-jam/regen_my_sentences
