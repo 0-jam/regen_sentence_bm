@@ -67,7 +67,7 @@ def main():
     char2idx = {char:index for index, char in enumerate(unique)}
     idx2char = {index:char for index, char in enumerate(unique)}
 
-    # 文の長さを指定
+    # 文を区切る長さを指定
     max_length = 100
     vocab_size = len(unique)
     embedding_dim = 256
@@ -104,14 +104,16 @@ def main():
 
     epoch = 0
     elapsed_time = 0
+    # 損失関数最小値
+    min_loss = 100
+    # 制限時間
     minutes = 60
     # minutes = 3
     start = time.time()
-    # 時間切れになったら…ではなく、時間切れになった時のepochの学習を終えたら学習終了
+    # この時間を経過したら…ではなく、時間切れになった時のepochの学習を終えたら学習終了
     while elapsed_time < (60 * minutes):
         epoch += 1
         epoch_start = time.time()
-        min_loss = 100
         # epochごとに隠れ状態(hidden state)を初期化
         hidden = model.reset_states()
 
@@ -120,18 +122,18 @@ def main():
                 # モデルに隠れ状態を与える
                 predictions, hidden = model(input, hidden)
 
-                # 損失関数に渡せる形に対象を整形する
-                # (reshape target to make loss function expect the target)
+                # reshape target to make loss function expect the target
                 target = tf.reshape(target, (-1,))
                 loss = loss_function(target, predictions)
 
+                # 損失関数最小値を記録
                 if min_loss > loss:
                     min_loss = loss
 
             gradients = tape.gradient(loss, model.variables)
             optimizer.apply_gradients(zip(gradients, model.variables), global_step = tf.train.get_or_create_global_step())
 
-            print("Epoch: {}, Batch: {}, Loss: {:.4f}".format(epoch, batch + 1, loss))
+            print("Epoch: {}, Batch: {}, Loss: {:.4f}".format(epoch, batch + 1, loss), end="\r")
 
         elapsed_time = time.time() - start
         print("Time taken for epoch {}: {:.3f} sec \n".format(epoch, time.time() - epoch_start))
@@ -151,8 +153,7 @@ def main():
     # 隠れ状態の形：(batch_size, units)
     hidden = [tf.zeros((1, units))]
 
-    print("Start generating...")
-    for i in tqdm(range(gen_size)):
+    for i in tqdm(range(gen_size), desc="Generating..."):
         # print("prediction {} / {}".format(i + 1, gen_size))
         predictions, hidden = model(input_eval, hidden)
 
@@ -166,9 +167,10 @@ def main():
         generated_text += idx2char[predicted_id]
 
     generated_text = start_string + generated_text + "\n"
+    print("Generated text:")
     sys.stdout.write(generated_text)
 
-    print("Learned {} epochs in {} minutes ({:.3f} epochs / minute)".format(epoch, elapsed_time, epoch / elapsed_time))
+    print("Learned {} epochs in {:.3f} minutes ({:.3f} epochs / minute)".format(epoch, elapsed_time, epoch / elapsed_time))
     print("Minimum loss:", min_loss)
 
 if __name__ == '__main__':
