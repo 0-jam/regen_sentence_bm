@@ -1,56 +1,22 @@
 import argparse
 import numpy as np
-import random
-import re
 import time
 import tensorflow as tf
 tf.enable_eager_execution()
-from tensorflow import keras
-import sys
 import lzma
 from tqdm import tqdm
+from modules.model import Model
 
-class Model(tf.keras.Model):
-    def __init__(self, vocab_size, embedding_dim, units, batch_size, force_cpu=False):
-        super(Model, self).__init__()
-        self.units = units
-        self.batch_sz = batch_size
-        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+## Create input and target texts from the text
+def split_into_target(chunk):
+    input_text = chunk[:-1]
+    target_text = chunk[1:]
 
-        # CUDAが使えるか確認
-        if tf.test.is_gpu_available() and not force_cpu:
-            self.gru = tf.keras.layers.CuDNNGRU(
-                self.units,
-                return_sequences=True,
-                return_state=True,
-                recurrent_initializer='glorot_uniform'
-            )
-        else:
-            self.gru = tf.keras.layers.GRU(
-                self.units,
-                return_sequences=True,
-                return_state=True,
-                recurrent_activation='sigmoid',
-                recurrent_initializer='glorot_uniform'
-            )
+    return input_text, target_text
 
-        self.fc = tf.keras.layers.Dense(vocab_size)
-
-    def call(self, x, hidden):
-        x = self.embedding(x)
-
-        # statesにモデルの状態を格納
-        # 訓練中に毎回渡される
-        output, states = self.gru(x, initial_state=hidden)
-
-        # Densely-connected層に渡せる形にデータを整形
-        # 整形後：(batch_size * max_length, hidden)
-        output = tf.reshape(output, (-1, output.shape[2]))
-
-        # output shape after the dense layer is (batch_size * max_length, vocab_size)
-        x = self.fc(output)
-
-        return x, states
+## Using sparse_softmax_cross_entropy so that we don't have to create one-hot vectors
+def loss_function(real, preds):
+    return tf.losses.sparse_softmax_cross_entropy(labels=real, logits=preds)
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmarking of sentence generation with RNN.")
@@ -60,47 +26,41 @@ def main():
     with lzma.open('souseki_utf8.txt.xz') as file:
         text = file.read().decode()
 
-    # テキスト中に現れる文字を取得
-    unique = sorted(set(text))
-    # 各文字に数字を割り当てる
-    # テキストにない文字は記録されないので，開始文字列に未知の文字を与えるとエラー
-    char2idx = {char:index for index, char in enumerate(unique)}
-    idx2char = {index:char for index, char in enumerate(unique)}
+    ## Vectorize the text
+    text_size = len(text)
+    # unique character in text
+    vocab = sorted(set(text))
+    vocab_size = len(vocab)
+    print("Text has {} characters ({} unique characters)".format(text_size, vocab_size))
+    # Creating a mapping from unique characters to indices
+    # This list doesn't have character that is not contained in the text
+    char2idx = {char:index for index, char in enumerate(vocab)}
+    idx2char = np.array(vocab)
+    text_as_int = np.array([char2idx[c] for c in text])
 
-    # 文を区切る長さを指定
-    max_length = 100
-    vocab_size = len(unique)
-    embedding_dim = 256
-    units = 1024
-    # embedding_dim = 4
-    # units = 16
+    # The maximum length sentence we want for single input in characters
+    seq_length = 100
+    chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(seq_length + 1, drop_remainder=True)
+
     batch_size = 64
-    # シャッフル用バッファサイズ
+    # Buffer size to shuffle the dataset
     buffer_size = 10000
 
-    ## 入力・出力用テンソル作成
-    input_text = []
-    target_text = []
+    ## Creating batches and shuffling them
+    dataset = chunks.map(split_into_target)
+    dataset = dataset.shuffle(buffer_size).batch(batch_size, drop_remainder=True)
 
-    for i in range(0, len(text) - max_length, max_length):
-        input = text[i:i + max_length]
-        target = text[i + 1:i + 1 + max_length]
-
-        input_text.append([char2idx[j] for j in input])
-        target_text.append([char2idx[k] for k in target])
-
-    ## バッチを作ってシャッフルする
-    dataset = tf.data.Dataset.from_tensor_slices((input_text, target_text)).shuffle(buffer_size)
-    dataset = dataset.batch(batch_size, drop_remainder=True)
+    ## Create the model
+    embedding_dim = 256
+    # embedding_dim = 16
+    # RNN (Recursive Neural Network) nodes
+    units = 1024
+    # units = 64
 
     ## モデル作成
-    model = Model(vocab_size, embedding_dim, units, batch_size, force_cpu=args.cpu_mode)
+    model = Model(vocab_size, embedding_dim, units, force_cpu=args.cpu_mode)
     ## 最適化関数・損失関数を設定
     optimizer = tf.train.AdamOptimizer()
-
-    def loss_function(real, preds):
-        # one-hotベクトルを生成しなくていいようにsparse_softmax_cross_entropyを使う
-        return tf.losses.sparse_softmax_cross_entropy(labels=real, logits=preds)
 
     epoch = 0
     elapsed_time = 0
@@ -108,18 +68,20 @@ def main():
     min_loss = 100
     # 制限時間
     minutes = 60
-    # minutes = 3
+    # minutes = 2
     start = time.time()
     # この時間を経過したら…ではなく、時間切れになった時のepochの学習を終えたら学習終了
     while elapsed_time < (60 * minutes):
         epoch += 1
+        print("Epoch:", epoch)
         epoch_start = time.time()
-        # epochごとに隠れ状態(hidden state)を初期化
+
+        # initializing the hidden state at the start of every epoch
         hidden = model.reset_states()
 
         for (batch, (input, target)) in enumerate(dataset):
             with tf.GradientTape() as tape:
-                # モデルに隠れ状態を与える
+                # feeding the hidden state back into the model
                 predictions, hidden = model(input, hidden)
 
                 # reshape target to make loss function expect the target
@@ -131,12 +93,16 @@ def main():
                     min_loss = loss
 
             gradients = tape.gradient(loss, model.variables)
-            optimizer.apply_gradients(zip(gradients, model.variables), global_step = tf.train.get_or_create_global_step())
+            optimizer.apply_gradients(zip(gradients, model.variables))
 
-            print("Epoch: {}, Batch: {}, Loss: {:.4f}".format(epoch, batch + 1, loss), end="\r")
+            print("Batch: {}, Loss: {:.4f}".format(batch + 1, loss), end="\r")
 
         elapsed_time = time.time() - start
-        print("Time taken for epoch {}: {:.3f} sec \n".format(epoch, time.time() - epoch_start))
+        print("Time taken for epoch {}: {:.3f} sec, Loss: {:.3f}\n".format(
+            epoch,
+            time.time() - epoch_start,
+            loss.numpy()
+        ))
 
     print("Time!")
     elapsed_time = elapsed_time / 60
@@ -154,12 +120,11 @@ def main():
     hidden = [tf.zeros((1, units))]
 
     for i in tqdm(range(gen_size), desc="Generating..."):
-        # print("prediction {} / {}".format(i + 1, gen_size))
         predictions, hidden = model(input_eval, hidden)
 
         # モデルから返ってきた単語を予測するのに偏微分を使う
         predictions = predictions / temperature
-        predicted_id = tf.multinomial(tf.exp(predictions), num_samples = 1)[0][0].numpy()
+        predicted_id = tf.multinomial(predictions, num_samples=1)[-1, 0].numpy()
 
         # 予測された言葉と以前の隠れ状態をモデルに次の入力として渡す
         input_eval = tf.expand_dims([predicted_id], 0)
@@ -168,10 +133,10 @@ def main():
 
     generated_text = start_string + generated_text + "\n"
     print("Generated text:")
-    sys.stdout.write(generated_text)
+    print(generated_text)
 
     print("Learned {} epochs in {:.3f} minutes ({:.3f} epochs / minute)".format(epoch, elapsed_time, epoch / elapsed_time))
-    print("Minimum loss:", min_loss)
+    print("Minimum loss:", min_loss.numpy())
 
 if __name__ == '__main__':
     main()
