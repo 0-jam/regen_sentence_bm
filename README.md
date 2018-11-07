@@ -2,11 +2,12 @@
 
 - [以前書いた文書生成プログラム][mmt]ベースのベンチマークスクリプト
     - 基本的にオリジナルの機能を大きく省いただけ
-- 1時間（仮）で何epoch学習できて、そのモデルから1000文字（仮）生成した時にどの程度読める文章ができるかを比較
+- 1時間（仮）で何epoch学習できて，そのモデルから1000文字（仮）生成した時にどの程度読める文章ができるかを比較
 
 ---
 
 1. [Environments](#environments)
+1. [System Requirements](#system-requirements)
 1. [About Dataset](#about-dataset)
 1. [Installation](#installation)
 1. [Usage](#usage)
@@ -21,6 +22,11 @@
 - Python = 3.6.7 on Ubuntu 18.04.1 on Windows Subsystem for Linux (Windows 10 Home 1803 (April 2018))
 - Python = 3.6.7 on Windows 10 Home 1803 (April 2018)
 - TensorFlow >= 1.11.0
+
+## System Requirements
+
+- CPUはあればあるだけ使ってくれるらしい
+- メモリ消費は最大で約2.5Gなので，そのくらい自由に使えるとその分速いかも
 
 ## About Dataset
 
@@ -64,10 +70,10 @@ $ python bm1h_rnn_sentence.py
 
 1. モデルの学習が始まった瞬間から計測スタート
 1. あらかじめ決められた時間の間学習を続ける
-1. 決められた時間を超過した場合、そのepochを終えた段階で学習を終了する
+1. 決められた時間を超過した場合，そのepochを終えた段階で学習を終了する
     - 例：制限時間15分
-        - epoch数3の学習中に15分経過した場合、epoch3の学習を終えてループ終了
-        - つまり、実際の実行時間は制限時間を超える
+        - epoch数3の学習中に15分経過した場合，epoch3の学習を終えてループ終了
+        - つまり，実際の実行時間は制限時間を超える
 1. 結果を表示
     - 所要時間
     - epoch数
@@ -80,7 +86,7 @@ $ python bm1h_rnn_sentence.py
     - 1epochあたりにかかった時間は？
 - 最小のloss（損失関数）の値は？
     - 小さければ小さいほど _まともな_ 文章が生成される…はず
-    - 最終的に出た値のほうがいいかもしれないが、ここでは最低値を評価する
+    - 最終的に出た値のほうがいいかもしれないが，ここでは最低値を評価する
 
 ## Records
 
