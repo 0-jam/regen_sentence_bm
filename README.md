@@ -1,5 +1,6 @@
-# (Benchmarking) Regenerate Sentences
+# (DEPRECATED) (Benchmarking) Regenerate Sentences
 
+- [もとの文書生成プログラム][mmt]に統合済みで、こちらはもう更新しない予定
 - [以前書いた文書生成プログラム][mmt]ベースのベンチマークスクリプト
     - 基本的にオリジナルの機能を大きく省いただけ
 - 1時間（仮）で何epoch学習できて，そのモデルから1000文字（仮）生成した時にどの程度読める文章ができるかを比較
