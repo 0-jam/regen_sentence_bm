@@ -50,8 +50,7 @@ class Model(keras.Model):
         # initializing the hidden state at the start of every epoch
         hidden = self.reset_states()
 
-        for (input, target) in tqdm(dataset):
-        # for (batch, (input, target)) in enumerate(dataset):
+        for (batch, (input, target)) in enumerate(dataset):
             with tf.GradientTape() as tape:
                 # feeding the hidden state back into the model
                 predictions, hidden = self(input, hidden)
@@ -63,8 +62,7 @@ class Model(keras.Model):
             gradients = tape.gradient(loss, self.variables)
             self.optimizer.apply_gradients(zip(gradients, self.variables))
 
-            print("Loss: {:.4f}".format(loss), end="\r")
-            # print("Batch: {}, Loss: {:.4f}".format(batch + 1, loss), end="\r")
+            print("Batch: {}, Loss: {:.4f}".format(batch + 1, loss), end="\r")
 
         return loss.numpy()
 

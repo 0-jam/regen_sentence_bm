@@ -20,18 +20,15 @@ def main():
 
     ## モデル作成
     embedding_dim = 256
-    # embedding_dim = 8
     # RNN (Recursive Neural Network) nodes
     units = 1024
-    # units = 32
 
     model = Model(dataset.vocab_size, embedding_dim, units, force_cpu=args.cpu_mode)
 
     epoch = 0
     elapsed_time = 0
     # 制限時間
-    # minutes = 60
-    minutes = 2
+    minutes = 60
     start = time.time()
     # この時間を経過したら…ではなく、時間切れになった時のepochの学習を終えたら学習終了
     while elapsed_time < (60 * minutes):
