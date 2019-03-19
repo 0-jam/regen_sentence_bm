@@ -1,96 +1,87 @@
-# (DEPRECATED) (Benchmarking) Regenerate Sentences
+# Benchmarking of Sentence Generation
 
-- [もとの文書生成プログラム][mmt]に統合済みで、こちらはもう更新しない予定
-- [以前書いた文書生成プログラム][mmt]ベースのベンチマークスクリプト
-    - 基本的にオリジナルの機能を大きく省いただけ
-- 1時間（仮）で何epoch学習できて，そのモデルから1000文字（仮）生成した時にどの程度読める文章ができるかを比較
+- Benchmarking script based on [rnn_sentence.py][mmt]
+    - Almost all functions have been removed from the original script
 
 ---
 
 1. [Environments](#environments)
-1. [System Requirements](#system-requirements)
-1. [About Dataset](#about-dataset)
+   1. [Software](#software)
+   1. [About Dataset](#about-dataset)
 1. [Installation](#installation)
 1. [Usage](#usage)
-1. [Rule](#rule)
-1. [Evaluation](#evaluation)
-1. [Records](#records)
+   1. [Rule (Regulation #3, 20190319)](#rule-regulation-3-20190319)
+   1. [Evaluation](#evaluation)
+   1. [Records](#records)
 
 ---
 
 ## Environments
 
-- Python = 3.6.7 on Ubuntu 18.04.1 on Windows Subsystem for Linux (Windows 10 Home 1803 (April 2018))
-- Python = 3.6.7 on Windows 10 Home 1803 (April 2018)
-- TensorFlow >= 1.11.0
+### Software
 
-## System Requirements
+- Python <= 3.7.2
+- Tested OSs
+    - Ubuntu 18.04.2 + ROCm 2.1
+    - Ubuntu 18.04.2 + CUDA 10.0 + CuDNN 7.5.0.56
+- TensorFlow >= 1.13.0 (< 2.0)
 
-- CPUはあればあるだけ使ってくれるらしい
-- メモリ消費は最大で約2.5Gなので，そのくらい自由に使えるとその分速いかも
+### About Dataset
 
-## About Dataset
-
-- 夏目漱石の小説7編
-    1. 坊っちゃん
-    1. こころ
-    1. 草枕
-    1. 思い出す事など
-    1. 三四郎
-    1. それから
-    1. 吾輩は猫である
-- [青空文庫](https://www.aozora.gr.jp/index_pages/person148.html)のテキスト版をベースに前処理
-    - 7編を1つのテキストファイルに結合
-    - ふりがなや装飾文字の除去
-        - 詳しくは[こちら](https://github.com/0-jam/regen_my_sentences#aozora-bunko)
-    - 文字コード変換(Shift_JIS (CP932) -> UTF-8)
-- 前処理後にXZ (LZMA2)で圧縮
-    - スクリプト実行時にPythonによって展開される
-    - 展開後サイズ：約3.01MiB
-    - 圧縮：`$ xz -9 -e -T 0 souseki_utf8.txt`
-    - 展開：`$ xz -d souseki_utf8.txt -k`
+- 7 novels written by Souseki Natsume（夏目漱石）
+    1. 坊っちゃん (Bocchan)
+    1. こころ (Kokoro)
+    1. 草枕 (Kusamakura)
+    1. 思い出す事など (Omoidasu koto nado)
+    1. 三四郎 (Sanshiro)
+    1. それから (Sorekara)
+    1. 吾輩は猫である (Wagahai wa neko de aru)
+- Based on [Aozora Bunko](https://www.aozora.gr.jp/index_pages/person148.html)
+    - Already preprocessed by [this](#aozora-bunko) method
+- Dataset is compressed to XZ
+    - Extract automatically when execute benchmarking
+    - About 3.01MiB after decompressing
+    - Compress: `$ xz -9 -e -T 0 souseki_utf8.txt`
+    - Extract: `$ xz -d souseki_utf8.txt -k`
 
 ## Installation
 
 ```bash
-# Pythonインストール前にLZMAライブラリのヘッダーをインストールする必要がある（Windowsでは不要）
+# If you use pyenv, install liblzma header before building Python
 $ sudo apt install liblzma-dev
-$ pyenv install 3.6.7
+$ pyenv install 3.7.2
 $ pip install tensorflow numpy tqdm
 ```
 
 ## Usage
 
 ```bash
-# これだけ
-# "-c"オプションをつけると強制的にCPUを使った学習になる
-$ python bm1h_rnn_sentence.py
+# Just execute:
+$ python bm_rnn_sentence.py
 ```
 
-## Rule
+### Rule (Regulation #3, 20190319)
 
-1. モデルの学習が始まった瞬間から計測スタート
-1. あらかじめ決められた時間の間学習を続ける
-1. 決められた時間を超過した場合，そのepochを終えた段階で学習を終了する
-    - 例：制限時間15分
-        - epoch数3の学習中に15分経過した場合，epoch3の学習を終えてループ終了
-        - つまり，実際の実行時間は制限時間を超える
-1. 結果を表示
-    - 所要時間
-    - epoch数
-    - 上二つから計算できる1分あたりのepoch数
-    - 損失関数の最小値
+1. Time measurement begins when training of the model is started
+1. Train _50_ (default) epochs
+    - If GPU is not available, the number of epoch reduces 50 to _3_
+1. Print results
+    - Elapsed time
+    - Trained epochs
+    - Epochs per minute
+    - The value of loss function
+    - Generated text
+        - The number of characters: 1000
 
-## Evaluation
+### Evaluation
 
-- 何epoch学習できたか？
-    - 1epochあたりにかかった時間は？
-- 最小のloss（損失関数）の値は？
-    - 小さければ小さいほど _まともな_ 文章が生成される…はず
-    - 最終的に出た値のほうがいいかもしれないが，ここでは最低値を評価する
+- How many epochs did the system learned?
+    - How many times per epoch?
+- What loss function's value?
+    - The smaller loss function's value, the more _readable_ sentence can be generated ...probably
 
-## Records
+### Records
 
-- ベンチマーク記録は[こちら](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
+- Records of benchmarking is [here](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
 
 [mmt]: https://github.com/0-jam/regen_my_sentences

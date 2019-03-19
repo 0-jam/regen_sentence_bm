@@ -1,0 +1,1 @@
+{"embedding_dim": 4, "units": 16, "batch_size": 16, "cpu_mode": true}
