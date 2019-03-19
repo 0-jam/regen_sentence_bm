@@ -1,18 +1,18 @@
 # Benchmarking of Sentence Generation
 
 - Benchmarking script based on [rnn_sentence.py][mmt]
-    - Almost all functions have been removed from the original script
+- Records of benchmarking is [here](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
 
 ---
 
 1. [Environments](#environments)
    1. [Software](#software)
-   1. [About Dataset](#about-dataset)
 1. [Installation](#installation)
 1. [Usage](#usage)
-   1. [Rule (Regulation #3, 20190319)](#rule-regulation-3-20190319)
+1. [Regulation (v3, 20190319)](#regulation-v3-20190319)
+   1. [About Dataset](#about-dataset)
+   1. [Rule](#rule)
    1. [Evaluation](#evaluation)
-   1. [Records](#records)
 
 ---
 
@@ -25,6 +25,24 @@
     - Ubuntu 18.04.2 + ROCm 2.1
     - Ubuntu 18.04.2 + CUDA 10.0 + CuDNN 7.5.0.56
 - TensorFlow >= 1.13.0 (< 2.0)
+
+## Installation
+
+```bash
+# If you use pyenv, install liblzma header before building Python
+$ sudo apt install liblzma-dev
+$ pyenv install 3.7.2
+$ pip install tensorflow numpy tqdm matplotlob
+```
+
+## Usage
+
+```bash
+# Just execute:
+$ python bm_rnn_sentence.py
+```
+
+## Regulation (v3, 20190319)
 
 ### About Dataset
 
@@ -44,30 +62,13 @@
     - Compress: `$ xz -9 -e -T 0 souseki_utf8.txt`
     - Extract: `$ xz -d souseki_utf8.txt -k`
 
-## Installation
-
-```bash
-# If you use pyenv, install liblzma header before building Python
-$ sudo apt install liblzma-dev
-$ pyenv install 3.7.2
-$ pip install tensorflow numpy tqdm
-```
-
-## Usage
-
-```bash
-# Just execute:
-$ python bm_rnn_sentence.py
-```
-
-### Rule (Regulation #3, 20190319)
+### Rule
 
 1. Time measurement begins when training of the model is started
 1. Train _50_ (default) epochs
     - If GPU is not available, the number of epoch reduces 50 to _3_
 1. Print results
     - Elapsed time
-    - Trained epochs
     - Epochs per minute
     - The value of loss function
     - Generated text
@@ -75,13 +76,8 @@ $ python bm_rnn_sentence.py
 
 ### Evaluation
 
-- How many epochs did the system learned?
-    - How many times per epoch?
+- How many times per epoch?
 - What loss function's value?
     - The smaller loss function's value, the more _readable_ sentence can be generated ...probably
-
-### Records
-
-- Records of benchmarking is [here](https://gist.github.com/0-jam/f21f44375cb70b987e99cda485d6940d)
 
 [mmt]: https://github.com/0-jam/regen_my_sentences
