@@ -1,18 +1,21 @@
+import functools
+import json
+import time
+from pathlib import Path
+import numpy as np
 import tensorflow as tf
+from tensorflow import keras
+from tqdm import tqdm
+
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 tf.enable_eager_execution(config=config)
-from tensorflow import keras
-from pathlib import Path
-import json
-from tqdm import tqdm
-import time
-import numpy as np
-import functools
 
-## Character-based model for benchmarking
+
+# Character-based model for benchmarking
 class BMModel(object):
     tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=True)
+
     def __init__(self, embedding_dim, units, batch_size, text, cpu_mode=True):
         # Hyper parameters
         self.embedding_dim = embedding_dim
@@ -27,6 +30,7 @@ class BMModel(object):
         self.idx2vocab = dict([(i, v) for v, i in self.vocab2idx.items()])
         self.idx2vocab[0] = '<oov>'
         self.vocab_size = len(self.vocab2idx) + 1
+        text_size = len(text)
         print("Text has {} characters ({} unique characters)".format(len(text), self.vocab_size - 1))
 
         # Creating a mapping from unique characters to indices
@@ -38,8 +42,10 @@ class BMModel(object):
         chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(seq_length + 1, drop_remainder=True)
         self.dataset = chunks.map(self.split_into_target)
         self.dataset = self.dataset.shuffle(buffer_size).batch(self.batch_size, drop_remainder=True)
+        self.steps_per_epoch = text_size // seq_length // batch_size
 
         self.model = self.build_model()
+        self.model.summary()
 
     def build_model(self):
         # Disable CUDA if GPU is not available
@@ -73,7 +79,7 @@ class BMModel(object):
 
     def fit(self, model_dir, epochs):
         start_time = time.time()
-        history = self.model.fit(self.dataset.repeat(), epochs=epochs, steps_per_epoch=self.batch_size)
+        history = self.model.fit(self.dataset.repeat(), epochs=epochs, steps_per_epoch=self.steps_per_epoch)
         elapsed_time = time.time() - start_time
         print("Time taken for learning {} epochs: {:.3f} minutes ({:.3f} minutes / epoch )".format(epochs, elapsed_time / 60, (elapsed_time / epochs) / 60))
 
@@ -132,12 +138,12 @@ class BMModel(object):
 
         return generated_text
 
-    ## Return the path to <ckpt_dir>/checkpoint
+    # Return the path to <ckpt_dir>/checkpoint
     @staticmethod
     def path(ckpt_dir):
         return tf.train.latest_checkpoint(str(Path(ckpt_dir)))
 
-    ## Return model settings as dict
+    # Return model settings as dict
     def parameters(self):
         return {
             'embedding_dim': self.embedding_dim,
@@ -146,7 +152,7 @@ class BMModel(object):
             'cpu_mode': self.cpu_mode
         }
 
-    ## Create input and target texts from the text
+    # Create input and target texts from the text
     @staticmethod
     def split_into_target(chunk):
         input_text = chunk[:-1]
@@ -154,6 +160,6 @@ class BMModel(object):
 
         return input_text, target_text
 
-    ## Convert string to numbers
+    # Convert string to numbers
     def vocab_to_indices(self, sentence):
         return np.array(self.tokenizer.texts_to_sequences(sentence.lower())).reshape(-1,)

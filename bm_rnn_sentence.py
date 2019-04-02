@@ -1,12 +1,15 @@
 import argparse
+import json
+import lzma
 import time
 from pathlib import Path
-import lzma
-import json
-from modules.model import BMModel
-from modules.plot_result import save_result
+
 import tensorflow as tf
 from tensorflow import keras
+
+from modules.model import BMModel
+from modules.plot_result import save_result
+
 
 def load_settings(params_json="settings/default.json"):
     with Path(params_json).open(encoding='utf-8') as params:
@@ -14,10 +17,12 @@ def load_settings(params_json="settings/default.json"):
 
     return parameters
 
+
 def load_test_settings():
     return load_settings("settings/test.json")
 
-## Evaluation methods
+
+# Evaluation methods
 # Load learned model
 def init_generator(model_dir, text):
     embedding_dim, units, _, cpu_mode = load_settings(model_dir.joinpath("parameters.json")).values()
@@ -26,6 +31,7 @@ def init_generator(model_dir, text):
     generator.load(model_dir)
 
     return generator
+
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmarking of sentence generation with RNN.")
@@ -57,7 +63,7 @@ def main():
     parameters["cpu_mode"] = args.cpu_mode
     embedding_dim, units, batch_size, cpu_mode = parameters.values()
 
-    ## Create the model
+    # Create the model
     model = BMModel(embedding_dim, units, batch_size, text, cpu_mode=cpu_mode)
     model.compile()
 
@@ -80,6 +86,7 @@ def main():
         out.write(generated_text)
 
     save_result(losses, save_to=str(result_dir) + "/losses_" + today + ".png")
+
 
 if __name__ == '__main__':
     main()
