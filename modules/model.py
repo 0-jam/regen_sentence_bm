@@ -2,102 +2,178 @@ import functools
 import json
 import time
 from pathlib import Path
+from random import choice
+import lzma
+
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tqdm import tqdm
 
-config = tf.ConfigProto()
+from modules.wakachi.mecab import divide_text, divide_word
+
+config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
 config.gpu_options.allow_growth = True
 tf.enable_eager_execution(config=config)
+tf.logging.set_verbosity(tf.logging.WARN)
+
+SEQ_LENGTH = 100
+BUFFER_SIZE = 10000
+NUM_HIDDEN_LAYERS = 1
+WORD_LIMIT = 15000
 
 
-# Character-based model for benchmarking
-class BMModel(object):
-    tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=True)
+class TextModel(object):
+    def __init__(self):
+        self.dataset = None
+        self.trainer = None
+        self.generator = None
 
-    def __init__(self, embedding_dim, units, batch_size, text, cpu_mode=True):
-        # Hyper parameters
-        self.embedding_dim = embedding_dim
-        self.units = units
-        self.batch_size = batch_size
-        self.cpu_mode = not tf.test.is_gpu_available() or cpu_mode
+    # Set hyper parameters from arguments
+    def set_parameters(self, embedding_dim=256, units=1024, batch_size=64, cpu_mode=False):
+        self.embedding_dim, self.units, self.batch_size, self.cpu_mode = embedding_dim, units, batch_size, cpu_mode
+
+    # Preparing the dataset
+    def build_dataset(self, text_path, char_level=True, encoding='utf-8'):
+        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=char_level)
+
+        with Path(text_path).open(encoding=encoding) as data:
+            text = data.read()
+
+        if not char_level:
+            text = divide_text(text)
+            self.tokenizer.num_words = WORD_LIMIT
 
         # Vectorize the text
         self.tokenizer.fit_on_texts(text)
-        self.vocab2idx = self.tokenizer.word_index
         # Index 0 is preserved in the Keras tokenizer for the unknown word, but it's not included in vocab2idx
-        self.idx2vocab = dict([(i, v) for v, i in self.vocab2idx.items()])
-        self.idx2vocab[0] = '<oov>'
-        self.vocab_size = len(self.vocab2idx) + 1
+        self.idx2vocab = {i: v for v, i in self.tokenizer.word_index.items()}
+        # self.idx2vocab[0] = '<oov>'
+        self.vocab_size = len(self.idx2vocab) + 1
         text_size = len(text)
-        print("Text has {} characters ({} unique characters)".format(len(text), self.vocab_size - 1))
+        print("Text has {} characters ({} unique characters)".format(text_size, self.vocab_size - 1))
 
         # Creating a mapping from unique characters to indices
         text_as_int = self.vocab_to_indices(text)
 
         # The maximum length sentence we want for single input in characters
-        seq_length = 100
-        buffer_size = 10000
-        chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(seq_length + 1, drop_remainder=True)
-        self.dataset = chunks.map(self.split_into_target)
-        self.dataset = self.dataset.shuffle(buffer_size).batch(self.batch_size, drop_remainder=True)
-        self.steps_per_epoch = text_size // seq_length // batch_size
+        chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(SEQ_LENGTH + 1, drop_remainder=True)
+        self.dataset = chunks.map(self.split_into_target).shuffle(BUFFER_SIZE).batch(self.batch_size, drop_remainder=True)
+        self.steps_per_epoch = text_size // SEQ_LENGTH // self.batch_size
 
-        self.model = self.build_model()
-        self.model.summary()
+    # Return model settings as dict
+    def parameters(self):
+        return {
+            'embedding_dim': self.embedding_dim,
+            'units': self.units,
+            'batch_size': self.batch_size,
+            'cpu_mode': self.cpu_mode
+        }
 
-    def build_model(self):
-        # Disable CUDA if GPU is not available
-        if self.cpu_mode:
+    # Create input and target texts from the text
+    @staticmethod
+    def split_into_target(chunk):
+        input_text = chunk[:-1]
+        target_text = chunk[1:]
+
+        return input_text, target_text
+
+    # Convert string to numbers
+    def vocab_to_indices(self, sentence):
+        if not self.tokenizer.char_level:
+            if type(sentence) == str:
+                sentence = divide_word(sentence.lower())
+
+            sentence = [sentence]
+        else:
+            sentence = sentence.lower()
+
+        return np.array(self.tokenizer.texts_to_sequences(sentence)).reshape(-1,)
+
+    # Preparing the model (both trainer/generator)
+    def build_model(self, batch_size=None):
+        # Hyper parameters
+        if not batch_size:
+            batch_size = self.batch_size
+
+        # Disable CuDNN if GPU is not available
+        if self.cpu_mode or not tf.test.is_gpu_available():
             gru = functools.partial(
                 keras.layers.GRU,
                 recurrent_activation='sigmoid',
             )
         else:
-            # CuDNNGRU seems to be deprecated
             gru = keras.layers.CuDNNGRU
 
-        return keras.Sequential([
-            keras.layers.Embedding(self.vocab_size, self.embedding_dim, batch_input_shape=[self.batch_size, None]),
-            gru(
+        grus = []
+        for _ in range(NUM_HIDDEN_LAYERS):
+            grus.append(gru(
                 self.units,
                 return_sequences=True,
                 stateful=True,
                 recurrent_initializer='glorot_uniform'
-            ),
-            keras.layers.Dropout(0.5),
-            keras.layers.Dense(self.vocab_size)
-        ])
+            ))
+            grus.append(keras.layers.Dropout(0.5))
+
+        return keras.Sequential(
+            [keras.layers.Embedding(self.vocab_size, self.embedding_dim, batch_input_shape=[batch_size, None])]
+            + grus
+            + [keras.layers.Dense(self.vocab_size)]
+        )
+
+    # Training tasks
+    def build_trainer(self):
+        self.trainer = self.build_model()
 
     @staticmethod
     def loss(labels, logits):
         return tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
 
     def compile(self):
-        self.model.compile(optimizer=tf.train.AdamOptimizer(), loss=self.loss)
+        self.trainer.compile(optimizer=tf.train.AdamOptimizer(), loss=self.loss)
 
-    def fit(self, model_dir, epochs):
+    @staticmethod
+    def callbacks(save_dir):
+        return [
+            keras.callbacks.ModelCheckpoint(str(Path(save_dir).joinpath("ckpt_{epoch}")), save_weights_only=True, period=5, verbose=1),
+            keras.callbacks.EarlyStopping(monitor='loss', patience=3, verbose=1)
+        ]
+
+    def fit(self, save_dir, epochs):
         start_time = time.time()
-        history = self.model.fit(self.dataset.repeat(), epochs=epochs, steps_per_epoch=self.steps_per_epoch)
+        history = self.trainer.fit(self.dataset.repeat(), epochs=epochs, steps_per_epoch=self.steps_per_epoch, callbacks=self.callbacks(save_dir))
         elapsed_time = time.time() - start_time
         print("Time taken for learning {} epochs: {:.3f} minutes ({:.3f} minutes / epoch )".format(epochs, elapsed_time / 60, (elapsed_time / epochs) / 60))
 
         return history
 
-    def save(self, model_dir):
-        if Path.is_dir(model_dir) is not True:
-            Path.mkdir(model_dir, parents=True)
+    def save_trainer(self, save_dir):
+        if Path.is_dir(save_dir) is not True:
+            Path.mkdir(save_dir, parents=True)
 
-        with model_dir.joinpath('parameters.json').open('w', encoding='utf-8') as params:
+        with save_dir.joinpath('parameters.json').open('w', encoding='utf-8') as params:
             params.write(json.dumps(self.parameters()))
 
-        self.model.save_weights(str(Path(model_dir.joinpath('weights'))))
+        self.trainer.save_weights(str(Path(save_dir.joinpath('weights'))))
 
-    def load(self, model_dir):
-        self.model.load_weights(self.path(Path(model_dir)))
+    def load_trainer(self, load_dir):
+        self.trainer.load_weights(self.path(Path(load_dir)))
 
-    def generate_text(self, start_string, gen_size=1, temp=1.0, delimiter=None):
+    # Generating tasks
+    def build_generator(self, load_dir):
+        self.generator = self.build_model(batch_size=1)
+        self.generator.load_weights(self.path(Path(load_dir)))
+
+    def save_generator(self, save_dir):
+        self.generator.save(str(Path(save_dir).joinpath('generator.h5')))
+
+    def load_generator(self, load_dir):
+        self.generator = keras.models.load_model(str(Path(load_dir).joinpath('generator.h5')))
+
+    def generate_text(self, start_string=None, gen_size=1, temp=1.0, delimiter=None):
+        if not start_string:
+            start_string = choice(self.idx2vocab)
+
         generated_text = [start_string]
         # Vectorize start string
         try:
@@ -111,10 +187,10 @@ class BMModel(object):
         temperature = temp
 
         count = 0
-        self.model.reset_states()
+        self.generator.reset_states()
         with tqdm(desc='Generating...', total=gen_size) as pbar:
             while count < gen_size:
-                predictions = self.model(input_eval)
+                predictions = self.generator(input_eval)
                 # remove the batch dimension
                 predictions = tf.squeeze(predictions, 0)
 
@@ -143,23 +219,59 @@ class BMModel(object):
     def path(ckpt_dir):
         return tf.train.latest_checkpoint(str(Path(ckpt_dir)))
 
-    # Return model settings as dict
-    def parameters(self):
-        return {
-            'embedding_dim': self.embedding_dim,
-            'units': self.units,
-            'batch_size': self.batch_size,
-            'cpu_mode': self.cpu_mode
-        }
 
-    # Create input and target texts from the text
+# Model for benchmarking
+class BMModel(TextModel):
+    def __init__(self):
+        super().__init__()
+        self.set_parameters()
+        self.build_dataset()
+        self.build_trainer()
+        self.compile()
+
+    def build_dataset(self):
+        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=True)
+
+        # Retrieve and decompress text
+        path = keras.utils.get_file("souseki.txt.xz", "https://drive.google.com/uc?export=download&id=1RnvBPi0GSg07-FhiuHpkwZahGwl4sMb5")
+        with lzma.open(path) as file:
+            text = file.read().decode()
+
+        # Vectorize the text
+        self.tokenizer.fit_on_texts(text)
+        # Index 0 is preserved in the Keras tokenizer for the unknown word, but it's not included in vocab2idx
+        self.idx2vocab = {i: v for v, i in self.tokenizer.word_index.items()}
+        self.vocab_size = len(self.idx2vocab) + 1
+        text_size = len(text)
+        print("Text has {} characters ({} unique characters)".format(text_size, self.vocab_size - 1))
+
+        # Creating a mapping from unique characters to indices
+        text_as_int = self.vocab_to_indices(text)
+
+        # The maximum length sentence we want for single input in characters
+        chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(SEQ_LENGTH + 1, drop_remainder=True)
+        self.dataset = chunks.map(self.split_into_target).shuffle(BUFFER_SIZE).batch(self.batch_size, drop_remainder=True)
+        self.steps_per_epoch = text_size // SEQ_LENGTH // self.batch_size
+
     @staticmethod
-    def split_into_target(chunk):
-        input_text = chunk[:-1]
-        target_text = chunk[1:]
+    def callbacks(model_dir):
+        return []
 
-        return input_text, target_text
+    def fit(self):
+        if tf.test.is_gpu_available():
+            epochs = 50
+        else:
+            epochs = 5
 
-    # Convert string to numbers
-    def vocab_to_indices(self, sentence):
-        return np.array(self.tokenizer.texts_to_sequences(sentence.lower())).reshape(-1,)
+        start_time = time.time()
+        history = self.trainer.fit(self.dataset.repeat(), epochs=epochs, steps_per_epoch=self.steps_per_epoch)
+        elapsed_time = time.time() - start_time
+        result_text = 'Time taken for learning {} epochs: {:.3f} minutes ({:.3f} minutes / epoch )\nLoss: {}'.format(
+            epochs, elapsed_time / 60,
+            (elapsed_time / epochs) / 60,
+            history.history['loss'][-1]
+        )
+
+        print(result_text)
+
+        return history, result_text
