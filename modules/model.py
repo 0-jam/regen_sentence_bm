@@ -1,9 +1,9 @@
 import functools
 import json
+import pickle
 import time
 from pathlib import Path
 from random import choice
-import lzma
 
 import numpy as np
 import tensorflow as tf
@@ -35,14 +35,13 @@ class TextModel(object):
 
     # Preparing the dataset
     def build_dataset(self, text_path, char_level=True, encoding='utf-8'):
-        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=char_level)
+        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=char_level, num_words=WORD_LIMIT)
 
         with Path(text_path).open(encoding=encoding) as data:
             text = data.read()
 
         if not char_level:
             text = divide_text(text)
-            self.tokenizer.num_words = WORD_LIMIT
 
         # Vectorize the text
         self.tokenizer.fit_on_texts(text)
@@ -60,6 +59,21 @@ class TextModel(object):
         chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(SEQ_LENGTH + 1, drop_remainder=True)
         self.dataset = chunks.map(self.split_into_target).shuffle(BUFFER_SIZE).batch(self.batch_size, drop_remainder=True)
         self.steps_per_epoch = text_size // SEQ_LENGTH // self.batch_size
+
+    # Save/Load the tokenizer as pickle
+    def save_tokenizer(self, save_dir):
+        with save_dir.joinpath('tokenizer.pickle').open('wb') as tokenizer_fp:
+            pickle.dump(self.tokenizer, tokenizer_fp)
+
+    def load_tokenizer(self, load_dir):
+        with Path(load_dir).joinpath('tokenizer.pickle').open('rb') as tokenizer_fp:
+            self.tokenizer = pickle.load(tokenizer_fp)
+
+        self.vocab_size = len(self.tokenizer.word_index) + 1
+        self.idx2vocab = {i: v for v, i in self.tokenizer.word_index.items()}
+
+    def is_word_based(self):
+        return not self.tokenizer.char_level
 
     # Return model settings as dict
     def parameters(self):
@@ -80,7 +94,7 @@ class TextModel(object):
 
     # Convert string to numbers
     def vocab_to_indices(self, sentence):
-        if not self.tokenizer.char_level:
+        if self.is_word_based():
             if type(sentence) == str:
                 sentence = divide_word(sentence.lower())
 
@@ -155,12 +169,16 @@ class TextModel(object):
             params.write(json.dumps(self.parameters()))
 
         self.trainer.save_weights(str(Path(save_dir.joinpath('weights'))))
+        self.save_tokenizer(save_dir)
 
     def load_trainer(self, load_dir):
         self.trainer.load_weights(self.path(Path(load_dir)))
 
     # Generating tasks
     def build_generator(self, load_dir):
+        with Path(load_dir).joinpath('parameters.json').open() as parameters:
+            self.set_parameters(**json.load(parameters))
+
         self.generator = self.build_model(batch_size=1)
         self.generator.load_weights(self.path(Path(load_dir)))
 
@@ -168,6 +186,7 @@ class TextModel(object):
         self.generator.save(str(Path(save_dir).joinpath('generator.h5')))
 
     def load_generator(self, load_dir):
+        self.load_tokenizer(load_dir)
         self.generator = keras.models.load_model(str(Path(load_dir).joinpath('generator.h5')))
 
     def generate_text(self, start_string=None, gen_size=1, temp=1.0, delimiter=None):
@@ -218,60 +237,3 @@ class TextModel(object):
     @staticmethod
     def path(ckpt_dir):
         return tf.train.latest_checkpoint(str(Path(ckpt_dir)))
-
-
-# Model for benchmarking
-class BMModel(TextModel):
-    def __init__(self):
-        super().__init__()
-        self.set_parameters()
-        self.build_dataset()
-        self.build_trainer()
-        self.compile()
-
-    def build_dataset(self):
-        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=True)
-
-        # Retrieve and decompress text
-        path = keras.utils.get_file("souseki.txt.xz", "https://drive.google.com/uc?export=download&id=1RnvBPi0GSg07-FhiuHpkwZahGwl4sMb5")
-        with lzma.open(path) as file:
-            text = file.read().decode()
-
-        # Vectorize the text
-        self.tokenizer.fit_on_texts(text)
-        # Index 0 is preserved in the Keras tokenizer for the unknown word, but it's not included in vocab2idx
-        self.idx2vocab = {i: v for v, i in self.tokenizer.word_index.items()}
-        self.vocab_size = len(self.idx2vocab) + 1
-        text_size = len(text)
-        print("Text has {} characters ({} unique characters)".format(text_size, self.vocab_size - 1))
-
-        # Creating a mapping from unique characters to indices
-        text_as_int = self.vocab_to_indices(text)
-
-        # The maximum length sentence we want for single input in characters
-        chunks = tf.data.Dataset.from_tensor_slices(text_as_int).batch(SEQ_LENGTH + 1, drop_remainder=True)
-        self.dataset = chunks.map(self.split_into_target).shuffle(BUFFER_SIZE).batch(self.batch_size, drop_remainder=True)
-        self.steps_per_epoch = text_size // SEQ_LENGTH // self.batch_size
-
-    @staticmethod
-    def callbacks(model_dir):
-        return []
-
-    def fit(self):
-        if tf.test.is_gpu_available():
-            epochs = 50
-        else:
-            epochs = 5
-
-        start_time = time.time()
-        history = self.trainer.fit(self.dataset.repeat(), epochs=epochs, steps_per_epoch=self.steps_per_epoch)
-        elapsed_time = time.time() - start_time
-        result_text = 'Time taken for learning {} epochs: {:.3f} minutes ({:.3f} minutes / epoch )\nLoss: {}'.format(
-            epochs, elapsed_time / 60,
-            (elapsed_time / epochs) / 60,
-            history.history['loss'][-1]
-        )
-
-        print(result_text)
-
-        return history, result_text

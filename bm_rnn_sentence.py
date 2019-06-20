@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from modules.plot_result import save_result
-from modules.model import BMModel
+from modules.bmmodel import BMModel
 
 
 def main():
