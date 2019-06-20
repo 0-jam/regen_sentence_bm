@@ -5,14 +5,14 @@
 
 ---
 
-1. [Environments](#environments)
-   1. [Software](#software)
-1. [Installation](#installation)
-1. [Usage](#usage)
-1. [Regulation (v3, 20190319)](#regulation-v3-20190319)
-   1. [About Dataset](#about-dataset)
-   1. [Rule](#rule)
-   1. [Evaluation](#evaluation)
+1. [Environments](#Environments)
+   1. [Software](#Software)
+1. [Installation](#Installation)
+1. [Usage](#Usage)
+1. [Regulation (v3, 20190319)](#Regulation-v3-20190319)
+   1. [About Dataset](#About-Dataset)
+   1. [Rule](#Rule)
+   1. [Evaluation](#Evaluation)
 
 ---
 
@@ -20,11 +20,12 @@
 
 ### Software
 
-- Python <= 3.7.2
+- Python <= 3.7.3
 - Tested OSs
     - Ubuntu 18.04.2 + ROCm 2.1
     - Ubuntu 18.04.2 + CUDA 10.0 + CuDNN 7.5.0.56
-- TensorFlow >= 1.13.0 (< 2.0)
+    - Arch Linux (Linux 5.1.11 + NVIDIA 430.26) + CUDA 10.1.168 + CuDNN 7.6.0.64
+- TensorFlow >= 1.14.0rc1 (< 2.0)
 
 ## Installation
 
