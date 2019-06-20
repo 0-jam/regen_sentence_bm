@@ -15,7 +15,7 @@ from modules.wakachi.mecab import divide_text, divide_word
 config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
 config.gpu_options.allow_growth = True
 tf.enable_eager_execution(config=config)
-tf.logging.set_verbosity(tf.logging.WARN)
+# tf.logging.set_verbosity(tf.logging.WARN)
 
 SEQ_LENGTH = 100
 BUFFER_SIZE = 10000
