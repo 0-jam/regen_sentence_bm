@@ -4,11 +4,10 @@ import time
 import tensorflow as tf
 from tensorflow import keras
 
-from modules.model import TextModel
+from modules.text_model import TextModel
 
 SEQ_LENGTH = 100
 BUFFER_SIZE = 10000
-WORD_LIMIT = 15000
 
 
 # Model for benchmarking
@@ -21,7 +20,7 @@ class BMModel(TextModel):
         self.compile()
 
     def build_dataset(self):
-        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=True)
+        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t', oov_token='<oov>', char_level=True)
 
         # Retrieve and decompress text
         path = keras.utils.get_file("souseki.txt.xz", "https://drive.google.com/uc?export=download&id=1RnvBPi0GSg07-FhiuHpkwZahGwl4sMb5")

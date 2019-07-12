@@ -10,17 +10,25 @@ import tensorflow as tf
 from tensorflow import keras
 from tqdm import tqdm
 
-from modules.wakachi.mecab import divide_text, divide_word
+from modules.wakachi.mecab import divide_word
 
 config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
 config.gpu_options.allow_growth = True
 tf.enable_eager_execution(config=config)
-# tf.logging.set_verbosity(tf.logging.WARN)
 
 SEQ_LENGTH = 100
 BUFFER_SIZE = 10000
 NUM_HIDDEN_LAYERS = 1
 WORD_LIMIT = 15000
+
+
+def divide_text(text):
+    sentences = []
+
+    for line in text.split('\n'):
+        sentences += divide_word(line) + ['\n']
+
+    return sentences
 
 
 class TextModel(object):
@@ -35,7 +43,7 @@ class TextModel(object):
 
     # Preparing the dataset
     def build_dataset(self, text_path, char_level=True, encoding='utf-8'):
-        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t\n', oov_token='<oov>', char_level=char_level, num_words=WORD_LIMIT)
+        self.tokenizer = keras.preprocessing.text.Tokenizer(filters='\\\t', oov_token='<oov>', char_level=char_level, num_words=WORD_LIMIT)
 
         with Path(text_path).open(encoding=encoding) as data:
             text = data.read()
@@ -189,7 +197,7 @@ class TextModel(object):
         self.load_tokenizer(load_dir)
         self.generator = keras.models.load_model(str(Path(load_dir).joinpath('generator.h5')))
 
-    def generate_text(self, start_string=None, gen_size=1, temp=1.0, delimiter=None):
+    def generate_text(self, start_string=None, gen_size=1, temperature=1.0, delimiter=None):
         if not start_string:
             start_string = choice(self.idx2vocab)
 
@@ -202,9 +210,6 @@ class TextModel(object):
             print('Unknown word included')
             return ''
 
-        # Randomness of text generation
-        temperature = temp
-
         count = 0
         self.generator.reset_states()
         with tqdm(desc='Generating...', total=gen_size) as pbar:
@@ -214,6 +219,7 @@ class TextModel(object):
                 predictions = tf.squeeze(predictions, 0)
 
                 # Using the multinomial distribution to predict the word returned by the model
+                # Temperature means randomness of text generation
                 predictions = predictions / temperature
                 predicted_id = tf.random.categorical(predictions, num_samples=1)[-1, 0].numpy()
 
@@ -223,7 +229,7 @@ class TextModel(object):
                 try:
                     char = self.idx2vocab[predicted_id]
                 except KeyError:
-                    # Mark as unknown word if predicted ID is out of bounds
+                    # Mark as an unknown word if predicted ID is out of bounds
                     char = '<oob>'
                 generated_text.append(char)
 
