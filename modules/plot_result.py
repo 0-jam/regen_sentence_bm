@@ -1,11 +1,17 @@
 import matplotlib.pyplot as plt
 
+# Default: (6.4, 4.8) = 640x480
+FIGSIZE = (16, 10)
+
 
 def plot_result(losses):
     fig, ax = plt.subplots()
 
     ax.set(xlabel='epoch', ylabel='loss', xticks=range(len(losses)))
     ax.plot(losses)
+
+    fig.set_size_inches(FIGSIZE)
+    fig.tight_layout()
 
     return fig
 
